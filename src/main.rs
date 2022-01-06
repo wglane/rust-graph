@@ -2,33 +2,17 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 struct Vertex<V> {
-    id: usize,
-    data: V,
+    name: String,
+    data: Box<V>,
 }
 
 struct Edge<E> {
-    id: usize,
-    data: E,
+    name: String,
+    data: Box<E>,
 }
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-struct VertexIden(usize);
-
-impl VertexIden {
-    fn from(i: usize) -> VertexIden {
-        VertexIden { 0: i }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-struct EdgeIden(usize);
 
 #[derive(Debug)]
-pub struct Graph<V, E>
-where
-    V: Eq + Hash + Clone,
-    E: Eq + Hash + Clone,
-{
+pub struct Graph<V, E> {
     vid_to_v: HashMap<VertexIden, V>,
     v_to_vid: HashMap<V, VertexIden>,
     eid_to_e: HashMap<EdgeIden, E>,
