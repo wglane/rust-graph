@@ -22,6 +22,12 @@ impl<N> Node<N> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EdgeIndex(usize);
 
+impl EdgeIndex {
+    pub fn from(i: usize) -> EdgeIndex {
+        EdgeIndex { 0: i }
+    }
+}
+
 #[derive(Debug)]
 pub struct Edge<E> {
     // source is implicit: stored with Node
@@ -103,7 +109,7 @@ impl<N, E> Graph<N, E> {
         }
     }
 
-    pub fn get_edge_ind_between_nodes(&self, source: NodeIndex, dest: NodeIndex) -> Option<EdgeIndex> {
+    pub fn get_edge_index_between_nodes(&self, source: NodeIndex, dest: NodeIndex) -> Option<EdgeIndex> {
         let source_node = self.get_node_from_index(source);
         let dest_node = self.get_node_from_index(dest);
         match (source_node, dest_node) {
@@ -126,7 +132,7 @@ impl<N, E> Graph<N, E> {
     }
 
     pub fn get_edge_between_nodes(&self, source: NodeIndex, dest: NodeIndex) -> Option<&Edge<E>> {
-        if let Some(ind) = self.get_edge_ind_between_nodes(source, dest) {
+        if let Some(ind) = self.get_edge_index_between_nodes(source, dest) {
             self.get_edge_from_index(ind)
         } else {
             None
@@ -134,7 +140,7 @@ impl<N, E> Graph<N, E> {
     }
 
     pub fn get_edge_between_nodes_mut(&mut self, source: NodeIndex, dest: NodeIndex) -> Option<&mut Edge<E>> {
-        if let Some(ind) = self.get_edge_ind_between_nodes(source, dest) {
+        if let Some(ind) = self.get_edge_index_between_nodes(source, dest) {
             self.get_edge_from_index_mut(ind)
         } else {
             None
@@ -142,21 +148,35 @@ impl<N, E> Graph<N, E> {
     }
 
     pub fn delete_node(&mut self, ind: NodeIndex) {
-        if let Some(_) = self.get_node_from_index(ind) {
-            for edge in self.edges.iter_mut() {
-                if let Some(e) = edge {
-                    if e.dest == ind {
-                        *edge = None
-                    }
+        if !self.has_node(ind) {
+            return
+        }
+        // delete all edges that point to that node
+        for edge in self.edges.iter_mut() {
+            if let Some(e) = edge {
+                if e.dest == ind {
+                    *edge = None
                 }
             }
-            self.nodes[ind.0] = None;
         }
+        // delete all edges from that node
+        let node = self.get_node_from_index(ind).unwrap();
+        // avoid multiple borrows by cloning indices into vector
+        let to_delete: Vec<EdgeIndex> = node.edges.iter().map(|&e| e.clone()).collect();
+        for edge_ind in to_delete {
+            self.delete_edge(edge_ind);
+        }
+        // delete node itself
+        self.nodes[ind.0] = None;
     }
 
-    pub fn delete_edge(&mut self, source: NodeIndex, dest: NodeIndex) {
-        if let Some(ind) = self.get_edge_ind_between_nodes(source, dest) {
-            self.edges[ind.0] = None
+    pub fn delete_edge(&mut self, ind: EdgeIndex) {
+        self.edges[ind.0] = None;
+    }
+
+    pub fn delete_edge_between_nodes(&mut self, source: NodeIndex, dest: NodeIndex) {
+        if let Some(ind) = self.get_edge_index_between_nodes(source, dest) {
+            self.delete_edge(ind);
         }
     }
 
@@ -164,12 +184,17 @@ impl<N, E> Graph<N, E> {
         self.get_node_from_index(ind).is_some()
     }
 
-    pub fn has_edge_from_ind(&self, ind: EdgeIndex) -> bool {
+    pub fn has_edge(&self, ind: EdgeIndex) -> bool {
         self.get_edge_from_index(ind).is_some()
     }
 
     pub fn size(&self) -> (usize, usize) {
-        (self.nodes.len(), self.edges.len())
+        // counts entries that are Some(_)
+        (self.nodes.iter().flatten().count(), self.edges.iter().flatten().count())
+    }
+
+    pub fn merge_nodes(&self, from: NodeIndex, into: NodeIndex) {
+        unimplemented!()
     }
 
     fn push_edge(&mut self, e: Edge<E>) -> EdgeIndex {
@@ -177,6 +202,7 @@ impl<N, E> Graph<N, E> {
         self.edges.push(Some(e));
         ind
     }
+    
 }
 
 #[test]
@@ -189,13 +215,22 @@ fn test_graph() {
     type HasFriend = bool;
     type FriendGraph = Graph<Person, HasFriend>;
 
+    // test empty graph
     let mut g: FriendGraph = Graph::new();
+    assert_eq!((0, 0), g.size());
+    assert!(!g.has_node(NodeIndex::from(0)));
+    assert!(!g.has_edge(EdgeIndex::from(0)));
+
+    // test add bogus edge to empty graph 
+    assert!(g.add_edge(NodeIndex::from(2), NodeIndex::from(5), true).is_none());
     assert_eq!((0, 0), g.size());
 
     let bob = Person {
         name: "bob".to_string(),
         age: 37,
     };
+
+    // test add node
     g.add_node(bob);
     assert_eq!((1, 0), g.size());
 
@@ -203,19 +238,54 @@ fn test_graph() {
         name: "sally".to_string(),
         age: 24,
     };
+
+    // test add second node
     g.add_node(sally);
     assert_eq!((2, 0), g.size());
 
+    // test add edges
     g.add_edge(NodeIndex::from(0), NodeIndex::from(1), true);
     g.add_edge(NodeIndex::from(1), NodeIndex::from(0), true);
     assert_eq!((2, 2), g.size());
 
+    // test edges between nodes
     fn are_friends(g: &FriendGraph, a: NodeIndex, b: NodeIndex) -> bool {
         g.get_edge_between_nodes(a, b).is_some()
     }
-    
     assert!(are_friends(&g, NodeIndex::from(0), NodeIndex::from(1)));
     assert!(are_friends(&g, NodeIndex::from(1), NodeIndex::from(0)));
+    
+    let zach = Person {
+        name: "zach".to_string(),
+        age: 33
+    };
+
+    // test add more nodes and edges
+    g.add_node(zach);
+    g.add_edge(NodeIndex::from(0), NodeIndex::from(2), true);
+    g.add_edge(NodeIndex::from(2), NodeIndex::from(0), true);
+    assert_eq!((3, 4), g.size());
+    assert!(are_friends(&g, NodeIndex::from(0), NodeIndex::from(2)));
+    assert!(are_friends(&g, NodeIndex::from(2), NodeIndex::from(0)));
+
+    // test delete node
+    g.delete_node(NodeIndex::from(2));
+    assert_eq!((2, 2), g.size());
+    assert!(!g.has_node(NodeIndex::from(2)));
+
+    g.delete_edge_between_nodes(NodeIndex::from(0), NodeIndex::from(1));
+    g.delete_edge_between_nodes(NodeIndex::from(1), NodeIndex::from(0));
+    assert_eq!((2, 0), g.size());
+    assert!(!g.has_edge(EdgeIndex::from(2)));
+    assert!(!g.has_edge(EdgeIndex::from(3)));
+
+    g.delete_node(NodeIndex::from(1));
+    assert_eq!((1, 0), g.size());
+
+    // test double delete -- shouldn't change anything
+    g.delete_node(NodeIndex::from(1));
+    assert_eq!((1, 0), g.size());
+
 
     // To print graph:
     // println!("{:?}", g);
