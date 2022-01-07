@@ -1,5 +1,5 @@
-#[derive(Clone, Copy, Debug)]
-struct NodeIndex(usize);
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NodeIndex(usize);
 
 impl NodeIndex {
     fn from(i: usize) -> NodeIndex {
@@ -8,7 +8,7 @@ impl NodeIndex {
 }
 
 #[derive(Debug)]
-struct Node<N> {
+pub struct Node<N> {
     data: N,
     edges: Vec<EdgeIndex>,
 }
@@ -19,11 +19,11 @@ impl<N> Node<N> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-struct EdgeIndex(usize);
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EdgeIndex(usize);
 
 #[derive(Debug)]
-struct Edge<E> {
+pub struct Edge<E> {
     // source is implicit: stored with Node
     dest: NodeIndex,
     data: E,
@@ -36,7 +36,7 @@ impl<E> Edge<E> {
 }
 
 #[derive(Debug)]
-struct Graph<N, E> {
+pub struct Graph<N, E> {
     nodes: Vec<Option<Node<N>>>,
     edges: Vec<Option<Edge<E>>>,
 }
@@ -56,19 +56,58 @@ impl<N, E> Graph<N, E> {
     }
 
     pub fn add_edge(&mut self, source: NodeIndex, dest: NodeIndex, data: E) -> Option<EdgeIndex> {
-        if !self.is_valid_node_index(source) || !self.is_valid_node_index(dest) {
-            return None;
-        }
+        let mut source_node = self.get_node(source);
+        let dest_node = self.get_node(dest);
 
-        let source_node = self.nodes.get(source.0).unwrap();
-        let dest_node = self.nodes.get(dest.0).unwrap();
-        if source_node.is_none() || dest_node.is_none() {
-            return None;
+        match (source_node, dest_node) {
+            (None, _) => None,
+            (_, None) => None,
+            (Some(n), Some(m)) => {
+                let edge = Edge::from(dest, data);
+                let ind = self.push_edge(edge);
+                // TODO: add to target node's Edges
+                Some(self.push_edge(edge))
+            }
         }
-
-        let edge = Edge::from(dest, data);
-        Some(self.push_edge(edge))
     }
+
+    pub fn get_node(&self, ind: NodeIndex) -> Option<&Node<N>> {
+        match self.nodes.get(ind.0) {
+            None => None,
+            Some(None) => None,
+            Some(Some(n)) => Some(n),
+        }
+    }
+
+    pub fn get_edge_from_index(&self, ind: EdgeIndex) -> Option<&Edge<E>> {
+        match self.edges.get(ind.0) {
+            None => None,
+            Some(None) => None,
+            Some(Some(e)) => Some(e),
+        }
+    }
+
+    pub fn has_node(&self, ind: NodeIndex) -> bool {
+        self.get_node(ind).is_some()
+    }
+
+    pub fn has_edge_from_ind(&self, ind: EdgeIndex) -> bool {
+        self.get_edge_from_index(ind).is_some()
+    }
+
+    // pub fn get_edge(&self, source: NodeIndex, dest: NodeIndex) -> Option<&Edge<E>> {
+    //     if !self.has_node(source) || !self.has_node(dest) {
+    //         None
+    //     } else {
+    //         self.node
+    //         None
+    //     }
+    // }
+
+    // pub fn get_edge(&self) -> &Option<Edge<E>> {
+
+    // }
+    // pub fn get_node(&self) -> &Option<Node<V>> {}
 
     pub fn size(&self) -> (usize, usize) {
         (self.nodes.len(), self.edges.len())
@@ -90,18 +129,34 @@ impl<N, E> Graph<N, E> {
 }
 
 #[test]
-fn test_add_nodes() {
+fn test_graph() {
+    #[derive(Debug)]
     struct Person {
         name: String,
         age: u8,
     }
-    type are_friends = bool;
+    type HasFriend = bool;
 
-    let g: Graph<Person, are_friends> = Graph::new();
+    let mut g: Graph<Person, HasFriend> = Graph::new();
     assert_eq!((0, 0), g.size());
 
     let bob = Person {
         name: "bob".to_string(),
         age: 37,
     };
+    let mut nodes = vec![g.add_node(bob)];
+    assert_eq!((1, 0), g.size());
+
+    let sally = Person {
+        name: "sally".to_string(),
+        age: 24,
+    };
+    nodes.push(g.add_node(sally));
+    assert_eq!((2, 0), g.size());
+
+    let edges = vec![g.add_edge(nodes[0], nodes[1], true)];
+    assert_eq!((2, 1), g.size());
+
+    println!("{:?}", g);
+    assert!(false);
 }
