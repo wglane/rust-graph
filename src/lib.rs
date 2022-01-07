@@ -56,23 +56,31 @@ impl<N, E> Graph<N, E> {
     }
 
     pub fn add_edge(&mut self, source: NodeIndex, dest: NodeIndex, data: E) -> Option<EdgeIndex> {
-        let mut source_node = self.get_node(source);
-        let dest_node = self.get_node(dest);
+        let has_source_node = self.has_node(source);
+        let has_dest_node = self.has_node(dest);
 
-        match (source_node, dest_node) {
-            (None, _) => None,
-            (_, None) => None,
-            (Some(n), Some(m)) => {
+        match (has_source_node, has_dest_node) {
+            (false, _) => None,
+            (_, false) => None,
+            (true, _) => {
                 let edge = Edge::from(dest, data);
                 let ind = self.push_edge(edge);
-                // TODO: add to target node's Edges
-                Some(self.push_edge(edge))
+                self.get_node_from_index_mut(source).unwrap().edges.push(ind);
+                Some(ind)
             }
         }
     }
 
-    pub fn get_node(&self, ind: NodeIndex) -> Option<&Node<N>> {
+    pub fn get_node_from_index(&self, ind: NodeIndex) -> Option<&Node<N>> {
         match self.nodes.get(ind.0) {
+            None => None,
+            Some(None) => None,
+            Some(Some(n)) => Some(n),
+        }
+    }
+
+    pub fn get_node_from_index_mut(&mut self, ind: NodeIndex) -> Option<&mut Node<N>> {
+        match self.nodes.get_mut(ind.0) {
             None => None,
             Some(None) => None,
             Some(Some(n)) => Some(n),
@@ -87,27 +95,78 @@ impl<N, E> Graph<N, E> {
         }
     }
 
+    pub fn get_edge_from_index_mut(&mut self, ind:EdgeIndex) -> Option<&mut Edge<E>> {
+        match self.edges.get_mut(ind.0) {
+            None => None,
+            Some(None) => None,
+            Some(Some(e)) => Some(e)
+        }
+    }
+
+    pub fn get_edge_ind_between_nodes(&self, source: NodeIndex, dest: NodeIndex) -> Option<EdgeIndex> {
+        let source_node = self.get_node_from_index(source);
+        let dest_node = self.get_node_from_index(dest);
+        match (source_node, dest_node) {
+            (None, _) => None,
+            (_, None) => None,
+            (_, _) => {
+                let source_node = source_node.unwrap();
+                for edge_ind in source_node.edges.iter() {
+                    let edge = self.edges[edge_ind.0].as_ref();
+                    if let Some(e) = edge {
+                        if e.dest == dest {
+                            return Some(*edge_ind);
+                        }
+                    }
+
+                }
+                None
+            },
+        }
+    }
+
+    pub fn get_edge_between_nodes(&self, source: NodeIndex, dest: NodeIndex) -> Option<&Edge<E>> {
+        if let Some(ind) = self.get_edge_ind_between_nodes(source, dest) {
+            self.get_edge_from_index(ind)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_edge_between_nodes_mut(&mut self, source: NodeIndex, dest: NodeIndex) -> Option<&mut Edge<E>> {
+        if let Some(ind) = self.get_edge_ind_between_nodes(source, dest) {
+            self.get_edge_from_index_mut(ind)
+        } else {
+            None
+        }
+    }
+
+    pub fn delete_node(&mut self, ind: NodeIndex) {
+        if let Some(_) = self.get_node_from_index(ind) {
+            for edge in self.edges.iter_mut() {
+                if let Some(e) = edge {
+                    if e.dest == ind {
+                        *edge = None
+                    }
+                }
+            }
+            self.nodes[ind.0] = None;
+        }
+    }
+
+    pub fn delete_edge(&mut self, source: NodeIndex, dest: NodeIndex) {
+        if let Some(ind) = self.get_edge_ind_between_nodes(source, dest) {
+            self.edges[ind.0] = None
+        }
+    }
+
     pub fn has_node(&self, ind: NodeIndex) -> bool {
-        self.get_node(ind).is_some()
+        self.get_node_from_index(ind).is_some()
     }
 
     pub fn has_edge_from_ind(&self, ind: EdgeIndex) -> bool {
         self.get_edge_from_index(ind).is_some()
     }
-
-    // pub fn get_edge(&self, source: NodeIndex, dest: NodeIndex) -> Option<&Edge<E>> {
-    //     if !self.has_node(source) || !self.has_node(dest) {
-    //         None
-    //     } else {
-    //         self.node
-    //         None
-    //     }
-    // }
-
-    // pub fn get_edge(&self) -> &Option<Edge<E>> {
-
-    // }
-    // pub fn get_node(&self) -> &Option<Node<V>> {}
 
     pub fn size(&self) -> (usize, usize) {
         (self.nodes.len(), self.edges.len())
@@ -117,14 +176,6 @@ impl<N, E> Graph<N, E> {
         let ind = EdgeIndex { 0: self.edges.len() };
         self.edges.push(Some(e));
         ind
-    }
-
-    fn is_valid_node_index(&self, ind: NodeIndex) -> bool {
-        ind.0 < self.size().0
-    }
-
-    fn is_valid_edge_index(&self, ind: EdgeIndex) -> bool {
-        ind.0 < self.size().1
     }
 }
 
@@ -136,27 +187,37 @@ fn test_graph() {
         age: u8,
     }
     type HasFriend = bool;
+    type FriendGraph = Graph<Person, HasFriend>;
 
-    let mut g: Graph<Person, HasFriend> = Graph::new();
+    let mut g: FriendGraph = Graph::new();
     assert_eq!((0, 0), g.size());
 
     let bob = Person {
         name: "bob".to_string(),
         age: 37,
     };
-    let mut nodes = vec![g.add_node(bob)];
+    g.add_node(bob);
     assert_eq!((1, 0), g.size());
 
     let sally = Person {
         name: "sally".to_string(),
         age: 24,
     };
-    nodes.push(g.add_node(sally));
+    g.add_node(sally);
     assert_eq!((2, 0), g.size());
 
-    let edges = vec![g.add_edge(nodes[0], nodes[1], true)];
-    assert_eq!((2, 1), g.size());
+    g.add_edge(NodeIndex::from(0), NodeIndex::from(1), true);
+    g.add_edge(NodeIndex::from(1), NodeIndex::from(0), true);
+    assert_eq!((2, 2), g.size());
 
-    println!("{:?}", g);
-    assert!(false);
+    fn are_friends(g: &FriendGraph, a: NodeIndex, b: NodeIndex) -> bool {
+        g.get_edge_between_nodes(a, b).is_some()
+    }
+    
+    assert!(are_friends(&g, NodeIndex::from(0), NodeIndex::from(1)));
+    assert!(are_friends(&g, NodeIndex::from(1), NodeIndex::from(0)));
+
+    // To print graph:
+    // println!("{:?}", g);
+    // assert!(false);
 }
