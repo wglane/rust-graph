@@ -160,9 +160,8 @@ impl<N, E> Graph<N, E> {
             }
         }
         // delete all edges from that node
-        let node = self.get_node_from_index(ind).unwrap();
         // avoid multiple borrows by cloning indices into vector
-        let to_delete: Vec<EdgeIndex> = node.edges.iter().map(|&e| e.clone()).collect();
+        let to_delete = self.get_node_from_index(ind).unwrap().edges.clone();
         for edge_ind in to_delete {
             self.delete_edge(edge_ind);
         }
@@ -193,7 +192,7 @@ impl<N, E> Graph<N, E> {
         (self.nodes.iter().flatten().count(), self.edges.iter().flatten().count())
     }
 
-    pub fn merge_nodes(&self, from: NodeIndex, into: NodeIndex) {
+    pub fn merge_nodes(&mut self, from: NodeIndex, into: NodeIndex) {
         unimplemented!()
     }
 
