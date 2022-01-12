@@ -19,7 +19,7 @@ impl<N> Node<N> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EdgeIndex(usize);
 
 impl EdgeIndex {
@@ -193,7 +193,36 @@ impl<N, E> Graph<N, E> {
     }
 
     pub fn merge_nodes(&mut self, from: NodeIndex, into: NodeIndex) {
-        unimplemented!()
+        let from_node = self.get_node_from_index_mut(from);
+        let from_node = match from_node {
+            None => {return},
+            Some(node) => node
+        };
+        let to_node = self.get_node_from_index_mut(into);
+        let to_node = match to_node {
+            None => {return},
+            Some(node) => node,
+        };
+
+        // all edges from from_node now are from to_node
+        let mut to_append = from_node.edges.clone();
+        to_node.edges.append(&mut to_append);
+        // remove duplicate edges
+        to_node.edges.sort();
+        to_node.edges.dedup();
+
+        // all edges to from_node now point to to_node
+        for edge in self.edges.iter_mut() {
+            if let Some(e) = edge {
+                if e.dest == from {
+                    e.dest = into;
+                }
+            }
+        }
+
+        // delete from_node
+        self.nodes[from.0] = None;
+        
     }
 
     fn push_edge(&mut self, e: Edge<E>) -> EdgeIndex {
@@ -202,6 +231,24 @@ impl<N, E> Graph<N, E> {
         ind
     }
     
+}
+
+#[test]
+fn test_merge_nodes() {
+    type MyGraph = Graph<i32, bool>;
+    let mut g = MyGraph::new();
+    g.add_node(0);
+    g.add_node(1);
+    g.add_node(2);
+    g.add_edge(NodeIndex::from(0), NodeIndex::from(1), true);
+    g.add_edge(NodeIndex::from(1), NodeIndex::from(2), true);
+
+    g.merge_nodes(NodeIndex::from(1), NodeIndex::from(0));
+
+    assert!(!g.has_node(NodeIndex::from(1)));
+    assert!(g.get_edge_between_nodes(NodeIndex::from(0), NodeIndex::from(2)).is_some());
+    assert_eq!((2, 1), g.size());
+
 }
 
 #[test]
